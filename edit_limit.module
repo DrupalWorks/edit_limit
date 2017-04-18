@@ -6,6 +6,7 @@
  * run the module.
  */
 
+use Drupal\Component\Utility\Xss;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\node\NodeInterface;
@@ -37,7 +38,7 @@ function edit_limit_menu_alter(&$items) {
  * Implements hook_node_access().
  */
 function edit_limit_node_access(NodeInterface $node, $op, AccountInterface $account) {
-  if ($op == 'update' && $node->access('update')) {
+  if ($op == 'update') {
 
     if ($account->hasPermission('bypass edit limits')) {
       return AccessResult::allowed();
@@ -63,21 +64,23 @@ function _edit_limit_user_acccess(NodeInterface $node) {
     return $return;
   }
 
+  $config = \Drupal::config('edit_limit.settings');
+
   // Only limit edits if the content type is in the list.
-  $allowed_types = variable_get('edit_limit_node_types', array());
-  if (empty($allowed_types[$node->type])) {
+  $allowed_types = $config->get('node_types');
+  if (empty($allowed_types[$node->bundle()])) {
     return $return;
   }
 
   // Get the time limit settings
-  $edit_limit_node_time_enabled = variable_get('edit_limit_node_time_enabled', FALSE);
-  $time_limits['default'] = intval(variable_get('edit_limit_node_time_default', 10)) * 24 * 60 * 60;
-  $time_limits['node'][$node->type]  = intval(variable_get('edit_limit_node_time_' . $node->type, $time_limits['default']));
+  $edit_limit_node_time_enabled = $config->get('node_time_enabled');
+  $time_limits['default'] = intval($config->get('node_time_default')) * 24 * 60 * 60;
+  $time_limits['node'][$node->bundle()] = $time_limits['default'];
 
-  // Get the edit count limit settings
-  $edit_limit_node_count_enabled = variable_get('edit_limit_node_count_enabled', FALSE);
-  $count_limits['default'] = intval(variable_get('edit_limit_node_count_default', EDIT_LIMIT_NODE_COUNT_DEFAULT));
-  $count_limits['node'][$node->type] = intval(variable_get('edit_limit_node_count_' . $node->type, $count_limits['default']));
+  // Get the edit count limit settings.
+  $edit_limit_node_count_enabled = $config->get('node_count_enabled');
+  $count_limits['default'] = intval($config->get('node_count_default'));
+  $count_limits['node'][$node->bundle()] = $count_limits['default'];
 
   // If no options are enabled, we're done.
   if (!$edit_limit_node_time_enabled && !$edit_limit_node_count_enabled) {
@@ -87,9 +90,9 @@ function _edit_limit_user_acccess(NodeInterface $node) {
   // Test that the node hasn't been edited more than the allowed number of times.
   $count_limit_reached = FALSE;
   if ($edit_limit_node_count_enabled && $return) {
-    $edit_count = edit_limit_node_count($node->nid);
+    $edit_count = edit_limit_node_count($node->id());
 
-    $count_limit = ($count_limits['node'][$node->type]) ? $count_limits['node'][$node->type] : $count_limits['node']['default'];
+    $count_limit = ($count_limits['node'][$node->bundle()]) ? $count_limits['node'][$node->bundle()] : $count_limits['node']['default'];
     if ($count_limit <= $edit_count) {
       $return = FALSE;
       $count_limit_reached = TRUE;
@@ -98,21 +101,19 @@ function _edit_limit_user_acccess(NodeInterface $node) {
 
   // Test that the node was not created longer ago than the allowed time limit.
   if ($edit_limit_node_time_enabled && $return) {
-    $time_unit = variable_get('edit_limit_node_time_unit', EDIT_LIMIT_TIME_UNIT_DEFAULT);
-    $timeleft = intval($node->created) + intval(_unit_to_seconds(variable_get('edit_limit_node_time_default', EDIT_LIMIT_NODE_TIME_DEFAULT), $time_unit)) - REQUEST_TIME;
+    $time_unit = $config->get('node_time_unit');
+    $timeleft = intval($node->getCreatedTime()) + intval(_unit_to_seconds($config->get('node_time_default'), $time_unit)) - REQUEST_TIME;
 
-    drupal_add_js(drupal_get_path('module', 'edit_limit') . '/edit_limit.js');
-
+    //drupal_add_js(drupal_get_path('module', 'edit_limit') . '/edit_limit.js');
     if ($timeleft <= 0) {
-      $time_limit_reached = TRUE;
-      $return = FALSE;
+      $return = AccessResult::forbidden();
     }
-    elseif (!$count_limit_reached && arg(0) == 'node' && arg(2) == 'edit') {
+    elseif (!$count_limit_reached && \Drupal::routeMatch()->getRouteName() == 'entity.node.edit_form') {
       static $type;
       if (empty($type)) {
         $type = 'status';
         $message = '<span class="edit-limit-time-unit-' . $time_unit . '">' . t('You have %seconds %time_unit left to edit this content.', array('%seconds' => $timeleft, '%time_unit' => t('seconds'))) . '</span>';
-        drupal_set_message(filter_xss($message, array('em', 'span')), $type, FALSE);
+        drupal_set_message($message, $type);
       }
     }
   }
@@ -151,6 +152,7 @@ function _unit_to_seconds($time = 0, $unit = 'seconds') {
  * It must, at minimum, perform the comment module's access checks first.
  */
 function edit_limit_comment_access($edit = NULL, $comment = NULL) {
+  return;
   if (user_access('post comments')) {
     if (user_access('bypass edit limits')) {
       return TRUE;
@@ -253,6 +255,7 @@ function edit_limit_node_count($nid) {
  */
 //function edit_limit_link_alter(&$links, $node, $comment = NULL) {
 function edit_limit_node_view_alter(&$build) {
+  return;
   // Don't bother if the user can't edit their own comments anyway
   if (!user_access('edit own comments')) return FALSE;
 
