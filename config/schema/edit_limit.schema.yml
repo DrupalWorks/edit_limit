@@ -1,0 +1,34 @@
+edit_limiset.settings:
+  type: config_object
+  label: 'Edit limit settings'
+  mapping:
+    node_time_enabled:
+      type: boolean
+      label: 'Enable node time limits'
+    comment_time_enabled:
+      type: boolean
+      label: 'Enable comment time limits'
+    node_count_enabled:
+      type: boolean
+      label: 'Enable node count limits'
+    node_time_unit:
+      type: label
+      label: 'Node time unit'
+    node_time_default:
+      type: integer
+      label: 'Node time default'
+    node_count_default:
+      type: integer
+      label: 'Edit node count'
+    node_types:
+      type: sequence
+      label: 'Enabled node types'
+    comment_time_unit:
+      type: label
+      label: 'Comment time unit'
+    comment_time:
+      type: integer
+      label: 'Commente time default'
+    comment_types:
+      type: sequence
+      label: 'Enabled comment types'

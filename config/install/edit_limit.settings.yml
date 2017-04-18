@@ -1,0 +1,8 @@
+node_time_enabled: false
+comment_time_enabled: false
+node_count_enabled: false
+node_time_unit: 'seconds'
+node_time_default: 86400
+node_count_default: 3
+comment_time_unit: 'seconds'
+comment_time: 300

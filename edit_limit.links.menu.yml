@@ -1,0 +1,5 @@
+edit.admin_settings:
+  title: 'Edit limit'
+  parent: system.admin_config_content
+  description: 'Configure how often or how soon nodes and comments can be edited before they are locked.'
+  route_name: edit_limit.settings

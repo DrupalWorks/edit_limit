@@ -1,0 +1,6 @@
+bypass edit limits:
+  title: 'Bypass edit limits'
+  description: 'Bypass the edit limits set in place for normal users.'
+administer edit limit:
+  title: 'Administer edit limits'
+  description: 'Administer the edit limit settings.'

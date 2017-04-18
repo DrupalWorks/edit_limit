@@ -1,0 +1,7 @@
+edit_limit.settings:
+  path: 'admin/config/content/edit-limit'
+  defaults:
+    _form: '\Drupal\edit_limit\Form\SettingsForm'
+    _title: 'Edit limit'
+  requirements:
+    _permission: 'administer edit limit'
