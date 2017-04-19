@@ -6,6 +6,7 @@
  * run the module.
  */
 
+use Drupal\comment\CommentInterface;
 use Drupal\Component\Utility\Xss;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Entity\EntityInterface;
@@ -29,9 +30,6 @@ define('EDIT_LIMIT_TIME_UNIT_DEFAULT', 'seconds');
  * making edits.
  */
 function edit_limit_menu_alter(&$items) {
-  // node_access() overrides
-  $items['node/%node/edit']['access callback'] = 'edit_limit_node_access';
-
   // Override comment edit access checks
   $items['comment/%comment/edit']['access callback'] = 'edit_limit_comment_access';
 }
@@ -43,11 +41,10 @@ function edit_limit_node_access(NodeInterface $node, $op, AccountInterface $acco
   if ($op == 'update') {
 
     if ($account->hasPermission('bypass edit limits')) {
-      return AccessResult::allowed();
+      return AccessResult::neutral();
     }
 
-    return _edit_limit_user_acccess($node);
-
+    return _edit_limit_user_access($node);
   }
 
   return AccessResult::neutral();
@@ -57,7 +54,7 @@ function edit_limit_node_access(NodeInterface $node, $op, AccountInterface $acco
  * Helper function to perform additional access checks after node_access() has
  * been checked.
  */
-function _edit_limit_user_acccess(NodeInterface $node) {
+function _edit_limit_user_access(NodeInterface $node) {
   // Be liberal here. The user has already passed node_access() by this point.
   $return = AccessResult::neutral();
 
@@ -66,6 +63,7 @@ function _edit_limit_user_acccess(NodeInterface $node) {
     return $return;
   }
 
+  // Get config.
   $config = \Drupal::config('edit_limit.settings');
 
   // Only limit edits if the content type is in the list.
@@ -106,7 +104,6 @@ function _edit_limit_user_acccess(NodeInterface $node) {
     $time_unit = $config->get('node_time_unit');
     $timeleft = intval($node->getCreatedTime()) + intval(_unit_to_seconds($config->get('node_time_default'), $time_unit)) - REQUEST_TIME;
 
-    //drupal_add_js(drupal_get_path('module', 'edit_limit') . '/edit_limit.js');
     if ($timeleft <= 0) {
       $return = AccessResult::forbidden();
     }
@@ -150,46 +147,50 @@ function _unit_to_seconds($time = 0, $unit = 'seconds') {
 }
 
 /**
- * Access check function to see if the user can still edit the comment or not.
- * It must, at minimum, perform the comment module's access checks first.
+ * Implements hook_comment_access().
  */
-function edit_limit_comment_access($edit = NULL, $comment = NULL) {
-  return;
-  if (user_access('post comments')) {
-    if (user_access('bypass edit limits')) {
-      return TRUE;
-    }
-    $return = comment_access($edit, $comment);
+function edit_limit_comment_access(CommentInterface $entity, $operation, AccountInterface $account) {
+  if ($account->hasPermission('post comments') && $operation == 'update') {
 
-    // Only limit edits if content type is in the list.
-    $node = node_load($comment->nid);
-    if (!in_array($node->type, variable_get('edit_limit_comments', array()))) {
+    $return = AccessResult::neutral();
+
+    if ($account->hasPermission('bypass edit limits')) {
       return $return;
     }
-    if (variable_get('edit_limit_comment_time_enabled', FALSE)) {
-      $time_unit = variable_get('edit_limit_comment_time_unit', EDIT_LIMIT_TIME_UNIT_DEFAULT);
+
+    // Get config.
+    $config = \Drupal::config('edit_limit.settings');
+
+    // Only limit edits if content type is in the list.
+    $node = $entity->getCommentedEntity();
+    // Only limit edits if the content type is in the list.
+    $allowed_types = $config->get('comment_types');
+    if (empty($allowed_types[$node->bundle()])) {
+      return $return;
+    }
+
+    if ($config->get('comment_time_enabled')) {
+      $time_unit = $config->get('comment_time_unit');
       // By this point, we want to return false if the time has passed.
-      if ($comment->created + intval(_unit_to_seconds(variable_get('edit_limit_comment_time', EDIT_LIMIT_COMMENT_TIME), $time_unit)) < REQUEST_TIME) {
-        $return = FALSE;
+      if ($entity->getCreatedTime() + intval(_unit_to_seconds($config->get('comment_time'), $time_unit)) < REQUEST_TIME) {
+        $return = AccessResult::forbidden();
       }
       else {
         static $time_left;
-        if (empty($time_left)) {
-          drupal_add_js(drupal_get_path('module', 'edit_limit') . '/edit_limit.js');
-          $time_left = $comment->created + intval(_unit_to_seconds(variable_get('edit_limit_comment_time', EDIT_LIMIT_COMMENT_TIME), $time_unit)) - REQUEST_TIME;
-        }
-        if (user_access('edit own comments')) {
+        if (empty($time_left) && $account->hasPermission('edit own comments') && \Drupal::routeMatch()->getRouteName() == 'entity.comment.edit_form') {
+          $time_left = $entity->getCreatedTime() + intval(_unit_to_seconds($config->get('comment_time'), $time_unit)) - REQUEST_TIME;
           $type = 'status';
-          $message = '<span class="edit-limit-time-unit-' . check_plain($time_unit) . '">' . t('You have %time_left %time_unit left to edit this comment.', array('%time_left' => $time_left, '%time_unit' => 'seconds')) . '</span>';
-          drupal_set_message(filter_xss($message, array('em', 'span')), $type, FALSE);
+          $message = '<span class="edit-limit-time-unit-' . $time_unit . '">' . t('You have %time_left %time_unit left to edit this comment.', array('%time_left' => $time_left, '%time_unit' => 'seconds')) . '</span>';
+          drupal_set_message(['#markup' => $message, '#attached' => ['library' => ['js' => 'edit_limit/edit_limit.countdown']]], $type);
         }
       }
     }
+
     return $return;
   }
-  return FALSE;
-}
 
+  return AccessResult::neutral();
+}
 
 /**
  * Implements hook_node_update().
@@ -249,47 +250,4 @@ function edit_limit_node_count($nid) {
     ->fetchField();
   $count = (empty($count)) ? 0 : $count;
   return $count;
-}
-
-/**
- * Implements hook_link_alter().
- * This removes comment edit links if the comment is no longer editable.
- */
-//function edit_limit_link_alter(&$links, $node, $comment = NULL) {
-function edit_limit_node_view_alter(&$build) {
-  return;
-  // Don't bother if the user can't edit their own comments anyway
-  if (!user_access('edit own comments')) return FALSE;
-
-  if (!empty($build['links']['comment']['#links']['comment-add']) && !empty($build['comments']['comments'])) {
-    // Allow edit links if the edit count hasn't been reached yet.
-    // TODO: Complete this functionality.
-    if (0) {
-      $results = db_query("SELECT * FROM {edit_limit_comment_time} WHERE cid = :cid", array(':cid' => $comment->cid));
-    }
-
-    // Allow edit links if there is enough time left based on the system variable edit_limit_comment_time.
-    foreach ($build['comments']['comments'] as $key => $comment) {
-      if (!is_numeric($key)) continue;
-
-      // We don't have to do much user access checking, since this link will only exist if the user passed
-      // the comment_access() check for this given comment.
-      if (!user_access('bypass edit limits') && variable_get('edit_limit_comment_time_enabled', FALSE) && !empty($build['comments']['comments'][$key]['links']['comment']['#links']['comment-edit'])) {
-        $time_unit = variable_get('edit_limit_comment_time_unit', EDIT_LIMIT_TIME_UNIT_DEFAULT);
-        $time_limit = $comment['#comment']->created + intval(_unit_to_seconds(variable_get('edit_limit_comment_time', EDIT_LIMIT_COMMENT_TIME), $time_unit));
-
-        // If too much time has passed, destroy the link.
-        if ($time_limit < REQUEST_TIME) {
-          unset($build['comments']['comments'][$key]['links']['comment']['#links']['comment-edit']);
-        }
-        else {
-          // Add the javascript that will handle the countdown.
-          drupal_add_js(drupal_get_path('module', 'edit_limit') . '/edit_limit.js');
-
-          // Modify the link to add the remaining seconds (only users that can't pass 'bypass edit limits' get this far).
-          $build['comments']['comments'][$key]['links']['comment']['#links']['comment-edit']['title'] .= ' <span class="edit-limit-time-unit-' . $time_unit . '">' . t('(%time_limit %time_unit left)', array('%time_limit' => ($time_limit - REQUEST_TIME), '%time_unit' => 'seconds')) . '</span>';
-        }
-      }
-    }
-  }
 }
