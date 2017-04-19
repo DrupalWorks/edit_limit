@@ -8,6 +8,8 @@
 
 use Drupal\Component\Utility\Xss;
 use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\node\NodeInterface;
 
@@ -214,18 +216,18 @@ function edit_limit_node_update(NodeInterface $node) {
 }
 
 /**
- * Implements hook_node_prepare().
+ * Implements hook_entity_prepare_form().
  */
-function edit_limit_node_prepare($node) {
-  if (!empty($node->nid)) {
+function edit_limit_entity_prepare_form(EntityInterface $entity, $operation, FormStateInterface $form_state) {
+  if ($entity->getEntityTypeId() == 'node' && !$entity->isNew()) {
     if (\Drupal::config('edit_limit')->get('node_count_enabled')) {
       $limit = \Drupal::config('edit_limit')->get('node_count_default');
-      $count = edit_limit_node_count($node->nid);
+      $count = edit_limit_node_count($entity->id());
 
       // If the edit count is getting close to the limit, make this a warning instead of a simple status
       $type = ($count + 2 > $limit) ? 'warning' : 'status';
       $message = t("This node has been edit @count out of @limit times, after which it will be locked.", array('@count' => $count, '@limit' => $limit));
-      drupal_set_message(filter_xss($message), $type);
+      drupal_set_message($message, $type);
     }
   }
 }
