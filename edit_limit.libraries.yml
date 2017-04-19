@@ -1,0 +1,6 @@
+edit_limit.countdown:
+  version: VERSION
+  js:
+    edit_limit.js: {}
+  dependencies:
+    - core/jquery

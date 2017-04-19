@@ -1,8 +1,6 @@
 /*global Drupal: false */
 (function ($, undefined) {
 
-var first_downgrade = true;
-
 var comment_timer_update = function(node, time_left) {
   if(time_left > 0) {
     /* update counter */
@@ -90,7 +88,7 @@ var set_time_unit = function(el) {
   catch(e){}
 }
 
-Drupal.behaviors.tableSelect = {
+Drupal.behaviors.editLimit = {
   attach : function(context) {
     $("li.comment-edit a", context).each(function() {
       set_time_unit($(this));

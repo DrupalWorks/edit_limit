@@ -113,7 +113,7 @@ function _edit_limit_user_acccess(NodeInterface $node) {
       if (empty($type)) {
         $type = 'status';
         $message = '<span class="edit-limit-time-unit-' . $time_unit . '">' . t('You have %seconds %time_unit left to edit this content.', array('%seconds' => $timeleft, '%time_unit' => t('seconds'))) . '</span>';
-        drupal_set_message($message, $type);
+        drupal_set_message(['#markup' => $message, '#attached' => ['library' => ['js' => 'edit_limit/edit_limit.countdown']]], $type);
       }
     }
   }
